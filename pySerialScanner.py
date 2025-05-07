@@ -2,6 +2,7 @@
 import argparse
 import serial
 import subprocess
+import sys
 
 def send_keystroke(text: str):
     """Tell macOS to type out `text`. Escape any double-quotes."""
@@ -38,31 +39,42 @@ def main():
     )
     args = p.parse_args()
 
-    ser = serial.Serial(args.device, args.baud, timeout=args.timeout)
+    try:
+        ser = serial.Serial(args.device, args.baud, timeout=args.timeout)
+    except serial.SerialException as e:
+        print(f"Error opening {args.device}: {e}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Listening on {args.device} at {args.baud} baud… (Ctrl-C to quit)")
 
-    while True:
-        raw = ser.readline()            # grab up through CR or LF
-        if not raw:
-            continue
+    try:
+        while True:
+            raw = ser.readline()            # grab up through CR or LF
+            if not raw:
+                continue
 
-        chunk = raw.rstrip(b'\r\n')
-        if not chunk:
-            continue
+            chunk = raw.rstrip(b'\r\n')
+            if not chunk:
+                continue
 
-        # map control codes → placeholder strings
-        out = []
-        for b in chunk:
-            if   b == 0x1E: out.append('<RS>')
-            elif b == 0x1D: out.append('<GS>')
-            elif b == 0x04: out.append('<EOT>')
-            else:           out.append(chr(b))
-        text = ''.join(out)
+            # map control codes → placeholder strings
+            out = []
+            for b in chunk:
+                if   b == 0x1E: out.append('<RS>')
+                elif b == 0x1D: out.append('<GS>')
+                elif b == 0x04: out.append('<EOT>')
+                else:           out.append(chr(b))
+            text = ''.join(out)
 
-        # send in one shot, then Return
-        send_keystroke(text)
-        send_return()
+            # send in one shot, then Return
+            send_keystroke(text)
+            send_return()
+
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Shutting down…")
+    finally:
+        ser.close()
+        print("Serial port closed. Goodbye.")
 
 if __name__ == '__main__':
     main()
